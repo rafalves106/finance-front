@@ -23,11 +23,11 @@ import {
   ServerOff,
   RefreshCw,
 } from "lucide-react";
+import { data } from "autoprefixer";
 
-const API_URL = "https://controle-financeiro-ukwu.onrender.com/movimentacoes";
-const API_METAS_URL = "https://controle-financeiro-ukwu.onrender.com/metas";
-const API_MOTO_URL =
-  "https://controle-financeiro-ukwu.onrender.com/manutencoes";
+const API_URL = "http://localhost:5010/api/v1/movimentacoes";
+const API_METAS_URL = "http://localhost:5010/api/v1/metas";
+const API_MOTO_URL = "http://localhost:5010/api/v1/manutencoes";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("pt-BR", {
@@ -56,17 +56,20 @@ const DashboardView = ({
   loading,
 }) => {
   const [newItemName, setNewItemName] = useState("");
+  const [newItemDescription, setNewItemDescription] = useState("");
   const [newItemValue, setNewItemValue] = useState("");
-  const [inputType, setInputType] = useState("DESPESA");
+  const [inputType, setInputType] = useState("Saida");
 
   const handleAddItem = async (e) => {
     e.preventDefault();
     if (!newItemName || !newItemValue) return;
 
     const newItem = {
-      descricao: newItemName,
+      titulo: newItemName,
+      descricao: newItemDescription,
       valor: parseFloat(newItemValue),
       tipo: inputType,
+      data: new Date().toISOString(),
     };
 
     try {
@@ -83,14 +86,16 @@ const DashboardView = ({
     const localItem = {
       ...newItem,
       id: Date.now(),
-      name: newItem.descricao,
+      name: newItem.titulo,
+      description: newItem.descricao,
       value: newItem.valor,
       type: newItem.tipo,
     };
-    if (inputType === "RECEITA") setIncomes([...incomes, localItem]);
+    if (inputType === "Entrada") setIncomes([...incomes, localItem]);
     else setExpenses([...expenses, localItem]);
 
     setNewItemName("");
+    setNewItemDescription("");
     setNewItemValue("");
   };
 
@@ -100,7 +105,7 @@ const DashboardView = ({
     } catch (err) {
       alert("Erro ao deletar (API Offline?)", err);
     }
-    if (type === "RECEITA") setIncomes(incomes.filter((i) => i.id !== id));
+    if (type === "Entrada") setIncomes(incomes.filter((i) => i.id !== id));
     else setExpenses(expenses.filter((i) => i.id !== id));
   };
 
@@ -118,7 +123,7 @@ const DashboardView = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-2 text-emerald-600 mb-2 font-medium">
-            <ArrowUpCircle size={20} /> Receita
+            <ArrowUpCircle size={20} /> Entrada
           </div>
           <div className="text-2xl font-bold">
             {formatCurrency(totalIncome)}
@@ -126,7 +131,7 @@ const DashboardView = ({
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-2 text-rose-600 mb-2 font-medium">
-            <ArrowDownCircle size={20} /> Despesas
+            <ArrowDownCircle size={20} /> Saidas
           </div>
           <div className="text-2xl font-bold">
             {formatCurrency(totalExpenses)}
@@ -171,7 +176,7 @@ const DashboardView = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <h3 className="font-bold text-emerald-700 mb-3">Receitas</h3>
+          <h3 className="font-bold text-emerald-700 mb-3">Entradas</h3>
           {incomes.map((i) => (
             <div
               key={i.id}
@@ -182,7 +187,7 @@ const DashboardView = ({
                 <span className="font-semibold text-emerald-600">
                   {formatCurrency(i.value)}
                 </span>
-                <button onClick={() => handleRemove(i.id, "RECEITA")}>
+                <button onClick={() => handleRemove(i.id, "Entrada")}>
                   <Trash2
                     size={14}
                     className="text-slate-300 hover:text-red-500"
@@ -193,7 +198,7 @@ const DashboardView = ({
           ))}
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <h3 className="font-bold text-rose-700 mb-3">Despesas</h3>
+          <h3 className="font-bold text-rose-700 mb-3">Saidas</h3>
           {expenses.map((i) => (
             <div
               key={i.id}
@@ -204,7 +209,7 @@ const DashboardView = ({
                 <span className="font-semibold text-rose-600">
                   {formatCurrency(i.value)}
                 </span>
-                <button onClick={() => handleRemove(i.id, "DESPESA")}>
+                <button onClick={() => handleRemove(i.id, "Saida")}>
                   <Trash2
                     size={14}
                     className="text-slate-300 hover:text-red-500"
@@ -226,10 +231,17 @@ const DashboardView = ({
         >
           <input
             type="text"
-            placeholder="Descrição"
+            placeholder="Título (Ex: Salário, Aluguel)"
             className="flex-1 p-2 border rounded-lg"
             value={newItemName}
             onChange={(e) => setNewItemName(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Descrição"
+            className="flex-1 p-2 border rounded-lg"
+            value={newItemDescription}
+            onChange={(e) => setNewItemDescription(e.target.value)}
           />
           <input
             type="number"
@@ -243,8 +255,8 @@ const DashboardView = ({
             value={inputType}
             onChange={(e) => setInputType(e.target.value)}
           >
-            <option value="DESPESA">Despesa</option>
-            <option value="RECEITA">Receita</option>
+            <option value="Saida">Saida</option>
+            <option value="Entrada">Entrada</option>
           </select>
           <button
             type="submit"
@@ -913,10 +925,10 @@ const App = () => {
       if (!response.ok) throw new Error("Falha na API");
       const data = await response.json();
       setIncomes(
-        data.filter((item) => item.tipo === "RECEITA").map(mapApiToFrontend),
+        data.filter((item) => item.tipo === "Entrada").map(mapApiToFrontend),
       );
       setExpenses(
-        data.filter((item) => item.tipo === "DESPESA").map(mapApiToFrontend),
+        data.filter((item) => item.tipo === "Saida").map(mapApiToFrontend),
       );
       setError(null);
     } catch (err) {
@@ -929,8 +941,10 @@ const App = () => {
 
   const mapApiToFrontend = (item) => ({
     id: item.id,
-    name: item.descricao,
+    name: item.titulo,
+    description: item.descricao,
     value: item.valor,
+    date: item.data,
     type: item.tipo,
   });
 
