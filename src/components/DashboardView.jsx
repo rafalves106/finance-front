@@ -41,7 +41,6 @@ const DashboardView = ({
   const [newItemDate, setNewItemDate] = useState("");
   const [inputType, setInputType] = useState("Saida");
   const [isFixed, setIsFixed] = useState(false);
-  const [fixedDay, setFixedDay] = useState("");
   const [fixedPeriod, setFixedPeriod] = useState("");
 
   // <-- NOVO ESTADO PARA CONTROLAR A EDIÇÃO
@@ -124,7 +123,6 @@ const DashboardView = ({
       return acc;
     }, []);
 
-  // <-- NOVA FUNÇÃO PARA PREENCHER O FORMULÁRIO AO CLICAR NO LÁPIS
   const handleEditClick = (item, type) => {
     setEditingId(item.id);
     setNewItemName(item.name || item.titulo);
@@ -132,21 +130,17 @@ const DashboardView = ({
     setNewItemValue(item.value || item.valor);
     setInputType(type);
 
-    // Formata a data para o input do tipo date (YYYY-MM-DD)
     if (item.date || item.data) {
       const dateObj = new Date(item.date || item.data);
       setNewItemDate(dateObj.toISOString().split("T")[0]);
     }
 
     setIsFixed(item.fixa || false);
-    setFixedDay(item.diaFixo || "");
     setFixedPeriod(item.periodo || "");
 
-    // Opcional: Rola a página para cima suavemente para o usuário ver o form
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // <-- NOVA FUNÇÃO PARA CANCELAR A EDIÇÃO E LIMPAR O FORM
   const clearForm = () => {
     setEditingId(null);
     setNewItemName("");
@@ -154,7 +148,6 @@ const DashboardView = ({
     setNewItemValue("");
     setNewItemDate("");
     setIsFixed(false);
-    setFixedDay("");
     setFixedPeriod("");
     setInputType("Saida");
   };
@@ -162,18 +155,23 @@ const DashboardView = ({
   const handleAddItem = async (e) => {
     e.preventDefault();
 
-    if (!newItemName || !newItemValue || !inputType) return;
-    if (!isFixed && !newItemDate) return;
-    if (isFixed && (!fixedDay || !fixedPeriod)) return;
+    if (!newItemName || !newItemValue || !inputType || !newItemDate) {
+      console.log("Faltam dados básicos");
+      return;
+    }
+
+    if (isFixed && !fixedPeriod) {
+      console.log("Falta o período de duração");
+      return;
+    }
 
     const payload = {
       titulo: newItemName,
       descricao: newItemDescription,
       valor: parseFloat(newItemValue),
       tipo: inputType,
-      data: !isFixed ? formatDate(newItemDate) : new Date().toISOString(),
+      data: formatDate(newItemDate),
       fixa: isFixed,
-      diaFixo: isFixed ? parseInt(fixedDay) : null,
       periodo: isFixed ? parseInt(fixedPeriod) : 0,
     };
 
@@ -235,7 +233,6 @@ const DashboardView = ({
 
         <div className="flex-1 w-full">
           <ResponsiveContainer width="100%" height={240}>
-            {/* Gráfico mantido igual... */}
             <AreaChart
               data={chartData}
               margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
@@ -421,37 +418,25 @@ const DashboardView = ({
           </div>
 
           <div className="flex flex-col md:flex-row gap-4">
-            {!isFixed ? (
+            <input
+              type="date"
+              placeholder="Data"
+              className="flex-1 p-2 border rounded-lg placeholder-slate-500"
+              value={newItemDate}
+              onChange={(e) => setNewItemDate(e.target.value)}
+            />
+
+            {isFixed && (
               <input
-                type="date"
-                placeholder="Data"
-                className="flex-1 p-2 border rounded-lg placeholder-slate-500"
-                value={newItemDate}
-                onChange={(e) => setNewItemDate(e.target.value)}
+                type="number"
+                placeholder="Duração (meses)"
+                min="1"
+                className="flex-1 p-2 border rounded-lg placeholder-slate-500 disabled:bg-slate-50 disabled:text-slate-400"
+                value={fixedPeriod}
+                onChange={(e) => setFixedPeriod(e.target.value)}
+                title="Por quantos meses essa conta vai se repetir?"
+                disabled={editingId !== null}
               />
-            ) : (
-              <>
-                <input
-                  type="number"
-                  placeholder="Dia de Venc. (1-31)"
-                  min="1"
-                  max="31"
-                  className="flex-1 p-2 border rounded-lg placeholder-slate-500 disabled:bg-slate-50 disabled:text-slate-400"
-                  value={fixedDay}
-                  onChange={(e) => setFixedDay(e.target.value)}
-                  disabled={editingId !== null} // <-- Bloqueado na edição
-                />
-                <input
-                  type="number"
-                  placeholder="Duração (meses)"
-                  min="1"
-                  className="flex-1 p-2 border rounded-lg placeholder-slate-500 disabled:bg-slate-50 disabled:text-slate-400"
-                  value={fixedPeriod}
-                  onChange={(e) => setFixedPeriod(e.target.value)}
-                  title="Por quantos meses essa conta vai se repetir?"
-                  disabled={editingId !== null} // <-- Bloqueado na edição
-                />
-              </>
             )}
 
             <input
