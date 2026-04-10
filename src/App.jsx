@@ -20,13 +20,42 @@ const App = () => {
   const [expenses, setExpenses] = useState([]);
   const [workHoursPerMonth, setWorkHoursPerMonth] = useState(120);
   const [loading, setLoading] = useState(false);
-  const [investmentGoalPercent, setInvestmentGoalPercent] = useState(10);
+  const [investmentGoalPercent] = useState(10);
+  const [investments, setInvestments] = useState([]);
 
+  const totalInvestmentsBalance = investments.reduce(
+    (acc, curr) => acc + curr.saldoAtual,
+    0,
+  );
   const totalIncome = incomes.reduce((acc, curr) => acc + curr.value, 0);
   const totalExpenses = expenses.reduce((acc, curr) => acc + curr.value, 0);
-  const investmentAmount = totalIncome * (investmentGoalPercent / 100);
-  const finalBalance = totalIncome - totalExpenses; //investmentAmount;
-  const hourlyRate = totalIncome > 0 ? totalIncome / workHoursPerMonth : 0;
+  const finalBalance = totalIncome - totalExpenses;
+
+  const hoje = new Date();
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+
+  const currentMonthIncome = incomes
+    .filter((item) => {
+      const dataItem = new Date(item.date);
+      const dataLocal = new Date(
+        dataItem.getTime() + dataItem.getTimezoneOffset() * 60000,
+      );
+
+      const isCurrentMonth =
+        dataLocal.getMonth() === mesAtual &&
+        dataLocal.getFullYear() === anoAtual;
+
+      const isStandardIncome = !item.investimentoId;
+
+      return isCurrentMonth && isStandardIncome;
+    })
+    .reduce((acc, curr) => acc + curr.value, 0);
+
+  const investmentAmount = currentMonthIncome * (investmentGoalPercent / 100);
+
+  const hourlyRate =
+    currentMonthIncome > 0 ? currentMonthIncome / workHoursPerMonth : 0;
 
   useEffect(() => {
     fetchData();
@@ -35,14 +64,24 @@ const App = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_URL);
-      const data = await response.json();
+
+      const responseMov = await fetch(API_URL);
+      const dataMov = await responseMov.json();
+
       setIncomes(
-        data.filter((item) => item.tipo === "Entrada").map(mapApiToFrontend),
+        dataMov.filter((item) => item.tipo === "Entrada").map(mapApiToFrontend),
       );
       setExpenses(
-        data.filter((item) => item.tipo === "Saida").map(mapApiToFrontend),
+        dataMov.filter((item) => item.tipo === "Saida").map(mapApiToFrontend),
       );
+
+      const INV_API_URL = API_URL.replace("movimentacoes", "investimentos");
+      const responseInv = await fetch(`${INV_API_URL}?mostrarInativos=false`);
+
+      if (responseInv.ok) {
+        const dataInv = await responseInv.json();
+        setInvestments(dataInv);
+      }
     } catch (err) {
       console.error("Erro ao buscar dados:", err);
     } finally {
@@ -57,6 +96,7 @@ const App = () => {
     value: item.valor,
     date: item.data,
     type: item.tipo,
+    investimentoId: item.investimentoId,
   });
 
   return (
@@ -126,20 +166,19 @@ const App = () => {
             <DashboardView
               totalIncome={totalIncome}
               totalExpenses={totalExpenses}
-              investmentAmount={investmentAmount}
-              investmentGoalPercent={investmentGoalPercent}
-              setInvestmentGoalPercent={setInvestmentGoalPercent}
               finalBalance={finalBalance}
               incomes={incomes}
               expenses={expenses}
-              setIncomes={setIncomes}
-              setExpenses={setExpenses}
               fetchData={fetchData}
               loading={loading}
+              totalInvestmentsBalance={totalInvestmentsBalance}
             />
           )}
           {activeTab === "investments" && (
-            <InvestmentsView investmentAmount={investmentAmount} />
+            <InvestmentsView
+              investmentAmount={investmentAmount}
+              fetchData={fetchData}
+            />
           )}
           {activeTab === "wishlist" && (
             <WishlistView

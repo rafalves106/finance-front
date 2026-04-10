@@ -6,12 +6,13 @@ import { formatDate } from "../util/formatDate";
 import {
   Plus,
   Trash2,
-  Pencil, // <-- IMPORTADO AQUI
+  Pencil,
   Wallet,
   DollarSign,
   PiggyBank,
   ArrowDownCircle,
   ArrowUpCircle,
+  Briefcase,
 } from "lucide-react";
 
 import {
@@ -31,6 +32,7 @@ const DashboardView = ({
   totalExpenses,
   finalBalance,
   incomes,
+  totalInvestmentsBalance,
   expenses,
   fetchData,
   loading,
@@ -43,7 +45,6 @@ const DashboardView = ({
   const [isFixed, setIsFixed] = useState(false);
   const [fixedPeriod, setFixedPeriod] = useState("");
 
-  // <-- NOVO ESTADO PARA CONTROLAR A EDIÇÃO
   const [editingId, setEditingId] = useState(null);
 
   const sortTransactions = (transactions) => {
@@ -177,7 +178,6 @@ const DashboardView = ({
 
     try {
       if (editingId) {
-        // <-- FLUXO DE EDIÇÃO (PUT)
         const response = await fetch(`${API_URL}/${editingId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -185,11 +185,10 @@ const DashboardView = ({
         });
 
         if (response.ok) {
-          fetchData(); // Atualiza a tela com os dados do banco
-          clearForm(); // Limpa o formulário
+          fetchData();
+          clearForm();
         }
       } else {
-        // <-- FLUXO DE CRIAÇÃO (POST)
         const response = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -315,7 +314,6 @@ const DashboardView = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Cards mantidos iguais... */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
               <div className="flex items-center gap-2 text-emerald-600 mb-2 font-medium">
                 {" "}
@@ -339,17 +337,14 @@ const DashboardView = ({
             <div className="bg-blue-50 p-4 rounded-xl shadow-sm border border-blue-100">
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center gap-2 text-blue-700 font-medium">
-                  {" "}
-                  <PiggyBank size={20} /> Investimentos{" "}
+                  <PiggyBank size={20} /> Investimentos
                 </div>
                 <span className="text-xs font-bold text-blue-700 bg-blue-200 px-2 py-0.5 rounded-full">
-                  {" "}
-                  Meta: Definir{" "}
+                  Meta: Definir
                 </span>
               </div>
               <div className="text-2xl font-bold text-blue-900 mb-3">
-                {" "}
-                A implementar{" "}
+                {formatCurrency(totalInvestmentsBalance || 0)}
               </div>
             </div>
             <div
@@ -401,7 +396,7 @@ const DashboardView = ({
               className="w-4 h-4 text-emerald-500 rounded border-slate-300 disabled:opacity-50"
               checked={isFixed}
               onChange={(e) => setIsFixed(e.target.checked)}
-              disabled={editingId !== null} // <-- Bloqueia mudança de recorrência na edição
+              disabled={editingId !== null}
               title={
                 editingId
                   ? "Não é possível alterar a recorrência durante a edição"
@@ -519,28 +514,42 @@ const DashboardView = ({
                               {formatCurrency(i.value || i.valor)}
                             </span>
 
-                            {/* <-- BOTÃO DE EDITAR (LÁPIS) ADICIONADO AQUI */}
-                            <button
-                              onClick={() => handleEditClick(i, "Entrada")}
-                              className="p-1 hover:bg-amber-50 rounded-full transition-colors"
-                              title="Editar"
-                            >
-                              <Pencil
-                                size={14}
-                                className="text-slate-300 hover:text-amber-500"
-                              />
-                            </button>
+                            {/* <-- TRAVA DE EDIÇÃO/EXCLUSÃO AQUI --> */}
+                            {i.investimentoId ? (
+                              <div
+                                className="flex items-center gap-1 text-blue-500 bg-blue-50 px-2 py-1 rounded-md cursor-help"
+                                title="Gerenciado na aba de Investimentos"
+                              >
+                                <Briefcase size={14} />
+                                <span className="text-[10px] font-bold uppercase hidden sm:inline">
+                                  Investimento
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleEditClick(i, "Entrada")}
+                                  className="p-1 hover:bg-amber-50 rounded-full transition-colors"
+                                  title="Editar"
+                                >
+                                  <Pencil
+                                    size={14}
+                                    className="text-slate-300 hover:text-amber-500"
+                                  />
+                                </button>
 
-                            <button
-                              onClick={() => handleRemove(i.id, "Entrada")}
-                              className="p-1 hover:bg-red-50 rounded-full transition-colors"
-                              title="Excluir"
-                            >
-                              <Trash2
-                                size={14}
-                                className="text-slate-300 hover:text-red-500"
-                              />
-                            </button>
+                                <button
+                                  onClick={() => handleRemove(i.id)}
+                                  className="p-1 hover:bg-red-50 rounded-full transition-colors"
+                                  title="Excluir"
+                                >
+                                  <Trash2
+                                    size={14}
+                                    className="text-slate-300 hover:text-red-500"
+                                  />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -593,28 +602,42 @@ const DashboardView = ({
                               {formatCurrency(i.value || i.valor)}
                             </span>
 
-                            {/* <-- BOTÃO DE EDITAR (LÁPIS) ADICIONADO AQUI */}
-                            <button
-                              onClick={() => handleEditClick(i, "Saida")}
-                              className="p-1 hover:bg-amber-50 rounded-full transition-colors"
-                              title="Editar"
-                            >
-                              <Pencil
-                                size={14}
-                                className="text-slate-300 hover:text-amber-500"
-                              />
-                            </button>
+                            {/* <-- TRAVA DE EDIÇÃO/EXCLUSÃO AQUI --> */}
+                            {i.investimentoId ? (
+                              <div
+                                className="flex items-center gap-1 text-blue-500 bg-blue-50 px-2 py-1 rounded-md cursor-help"
+                                title="Gerenciado na aba de Investimentos"
+                              >
+                                <Briefcase size={14} />
+                                <span className="text-[10px] font-bold uppercase hidden sm:inline">
+                                  Investimento
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleEditClick(i, "Saida")}
+                                  className="p-1 hover:bg-amber-50 rounded-full transition-colors"
+                                  title="Editar"
+                                >
+                                  <Pencil
+                                    size={14}
+                                    className="text-slate-300 hover:text-amber-500"
+                                  />
+                                </button>
 
-                            <button
-                              onClick={() => handleRemove(i.id, "Saída")}
-                              className="p-1 hover:bg-red-50 rounded-full transition-colors"
-                              title="Excluir"
-                            >
-                              <Trash2
-                                size={14}
-                                className="text-slate-300 hover:text-red-500"
-                              />
-                            </button>
+                                <button
+                                  onClick={() => handleRemove(i.id)}
+                                  className="p-1 hover:bg-red-50 rounded-full transition-colors"
+                                  title="Excluir"
+                                >
+                                  <Trash2
+                                    size={14}
+                                    className="text-slate-300 hover:text-red-500"
+                                  />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
