@@ -5,44 +5,149 @@ import {
   LayoutDashboard,
   Target,
   Bike,
+  LogOut,
 } from "lucide-react";
 
 import DashboardView from "./components/DashboardView";
 import InvestmentsView from "./components/InvestmentsView";
 import WishlistView from "./components/WishListView";
 import MotoView from "./components/BikeView";
+import CategoryManagerModal from "./components/CategoryManagerModal";
+import LoginView from "./components/LoginView";
 
-import { API_URL } from "./services/api";
+import {
+  API_URL,
+  API_INVESTIMENTOS_URL,
+  API_CATEGORIAS_URL,
+} from "./services/api";
+import { getAuthHeaders, isAuthenticated, removeToken } from "./services/auth";
+
+const mapApiToFrontend = (item) => ({
+  id: item.id,
+  name: item.titulo,
+  description: item.descricao,
+  value: item.valor,
+  date: item.data,
+  type: item.tipo,
+  investimentoId: item.investimentoId,
+  categoriaId: item.categoriaId,
+  categoria: item.categoria,
+});
 
 const App = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(isAuthenticated());
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedMes, setSelectedMes] = useState(new Date().getMonth() + 1);
+  const [selectedAno, setSelectedAno] = useState(new Date().getFullYear());
   const [incomes, setIncomes] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [workHoursPerMonth, setWorkHoursPerMonth] = useState(120);
   const [loading, setLoading] = useState(false);
-  const [investmentGoalPercent, setInvestmentGoalPercent] = useState(10);
+  const [investments, setInvestments] = useState([]);
+  const [saldoAnterior, setSaldoAnterior] = useState(0);
 
+  const INVESTMENT_GOAL_PERCENT = 10;
+
+  const totalInvestmentsBalance = investments.reduce(
+    (acc, curr) => acc + curr.saldoAtual,
+    0,
+  );
   const totalIncome = incomes.reduce((acc, curr) => acc + curr.value, 0);
   const totalExpenses = expenses.reduce((acc, curr) => acc + curr.value, 0);
-  const investmentAmount = totalIncome * (investmentGoalPercent / 100);
-  const finalBalance = totalIncome - totalExpenses; //investmentAmount;
-  const hourlyRate = totalIncome > 0 ? totalIncome / workHoursPerMonth : 0;
+  const finalBalance = totalIncome - totalExpenses;
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const currentMonthIncome = incomes
+    .filter((item) => !item.investimentoId)
+    .reduce((acc, curr) => acc + curr.value, 0);
+
+  const investmentAmount = currentMonthIncome * (INVESTMENT_GOAL_PERCENT / 100);
+
+  const hourlyRate =
+    currentMonthIncome > 0 ? currentMonthIncome / workHoursPerMonth : 0;
+
+  const handleChangeMonth = (mes, ano) => {
+    setSelectedMes(mes);
+    setSelectedAno(ano);
+  };
+
+  const fetchCategorias = async () => {
+    try {
+      const response = await fetch(API_CATEGORIAS_URL, {
+        headers: getAuthHeaders(),
+      });
+
+      if (response.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setCategorias(data);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar categorias:", err);
+    }
+  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_URL);
-      const data = await response.json();
+
+      const responseMov = await fetch(
+        `${API_URL}?mes=${selectedMes}&ano=${selectedAno}`,
+        { headers: getAuthHeaders() },
+      );
+
+      if (responseMov.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
+
+      const dataMov = await responseMov.json();
+
       setIncomes(
-        data.filter((item) => item.tipo === "Entrada").map(mapApiToFrontend),
+        dataMov.filter((item) => item.tipo === "Entrada").map(mapApiToFrontend),
       );
       setExpenses(
-        data.filter((item) => item.tipo === "Saida").map(mapApiToFrontend),
+        dataMov.filter((item) => item.tipo === "Saida").map(mapApiToFrontend),
       );
+
+      const resSaldo = await fetch(
+        `${API_URL}/saldo-acumulado?mes=${selectedMes}&ano=${selectedAno}`,
+        { headers: getAuthHeaders() },
+      );
+
+      if (resSaldo.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
+
+      if (resSaldo.ok) {
+        const { saldo } = await resSaldo.json();
+        setSaldoAnterior(saldo);
+      }
+
+      const responseInv = await fetch(
+        `${API_INVESTIMENTOS_URL}?mostrarInativos=false`,
+        { headers: getAuthHeaders() },
+      );
+
+      if (responseInv.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
+
+      if (responseInv.ok) {
+        const dataInv = await responseInv.json();
+        setInvestments(dataInv);
+      }
     } catch (err) {
       console.error("Erro ao buscar dados:", err);
     } finally {
@@ -50,14 +155,21 @@ const App = () => {
     }
   };
 
-  const mapApiToFrontend = (item) => ({
-    id: item.id,
-    name: item.titulo,
-    description: item.descricao,
-    value: item.valor,
-    date: item.data,
-    type: item.tipo,
-  });
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchData();
+    }
+  }, [isLoggedIn, selectedMes, selectedAno]);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchCategorias();
+    }
+  }, [isLoggedIn]);
+
+  if (!isLoggedIn) {
+    return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
@@ -97,7 +209,7 @@ const App = () => {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 
+              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200
                 ${activeTab === item.id ? `${item.color} text-white shadow-lg` : "hover:bg-slate-800 hover:text-white"}`}
             >
               {item.icon}
@@ -106,8 +218,17 @@ const App = () => {
           ))}
         </nav>
 
-        <div className="p-6 border-t border-slate-800 hidden md:block">
+        <div className="p-6 border-t border-slate-800 hidden md:block space-y-3">
           <p className="text-xs text-slate-500">Logado como Admin</p>
+          <button
+            onClick={() => {
+              removeToken();
+              setIsLoggedIn(false);
+            }}
+            className="w-full flex items-center justify-center gap-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl py-2 transition-colors"
+          >
+            <LogOut size={16} /> Sair
+          </button>
         </div>
       </aside>
 
@@ -126,20 +247,26 @@ const App = () => {
             <DashboardView
               totalIncome={totalIncome}
               totalExpenses={totalExpenses}
-              investmentAmount={investmentAmount}
-              investmentGoalPercent={investmentGoalPercent}
-              setInvestmentGoalPercent={setInvestmentGoalPercent}
               finalBalance={finalBalance}
               incomes={incomes}
               expenses={expenses}
-              setIncomes={setIncomes}
-              setExpenses={setExpenses}
               fetchData={fetchData}
               loading={loading}
+              totalInvestmentsBalance={totalInvestmentsBalance}
+              selectedMes={selectedMes}
+              selectedAno={selectedAno}
+              onChangeMonth={handleChangeMonth}
+              categorias={categorias}
+              onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
+              saldoAnterior={saldoAnterior}
             />
           )}
           {activeTab === "investments" && (
-            <InvestmentsView investmentAmount={investmentAmount} />
+            <InvestmentsView
+              investmentAmount={investmentAmount}
+              fetchData={fetchData}
+              investments={investments}
+            />
           )}
           {activeTab === "wishlist" && (
             <WishlistView
@@ -150,6 +277,13 @@ const App = () => {
             />
           )}
           {activeTab === "moto" && <MotoView />}
+
+          <CategoryManagerModal
+            isOpen={isCategoryManagerOpen}
+            onClose={() => setIsCategoryManagerOpen(false)}
+            categorias={categorias}
+            onCategoriasChange={fetchCategorias}
+          />
         </div>
       </main>
     </div>

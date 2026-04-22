@@ -1,17 +1,21 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { API_URL } from "../services/api";
 import { formatCurrency } from "../util/formatCurrency";
-import { formatDate } from "../util/formatDate";
+import TransactionModal from "./TransactionModal";
+import { getAuthHeaders } from "../services/auth";
 
 import {
-  Plus,
   Trash2,
-  Pencil, // <-- IMPORTADO AQUI
+  Pencil,
   Wallet,
   DollarSign,
   PiggyBank,
   ArrowDownCircle,
   ArrowUpCircle,
+  Briefcase,
+  Plus,
+  PieChart,
+  Settings,
 } from "lucide-react";
 
 import {
@@ -26,192 +30,175 @@ import {
   Legend,
 } from "recharts";
 
+const sortTransactions = (transactions) => {
+  return [...transactions].sort((a, b) => {
+    const dateA = new Date(a.date || a.data);
+    const dateB = new Date(b.date || b.data);
+    return dateA - dateB;
+  });
+};
+
 const DashboardView = ({
   totalIncome,
   totalExpenses,
   finalBalance,
-  incomes,
-  expenses,
+  totalInvestmentsBalance,
   fetchData,
   loading,
+  selectedMes,
+  selectedAno,
+  onChangeMonth,
+  categorias,
+  onOpenCategoryManager,
+  incomes = [],
+  expenses = [],
+  saldoAnterior = 0,
 }) => {
-  const [newItemName, setNewItemName] = useState("");
-  const [newItemDescription, setNewItemDescription] = useState("");
-  const [newItemValue, setNewItemValue] = useState("");
-  const [newItemDate, setNewItemDate] = useState("");
-  const [inputType, setInputType] = useState("Saida");
-  const [isFixed, setIsFixed] = useState(false);
-  const [fixedPeriod, setFixedPeriod] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
 
-  // <-- NOVO ESTADO PARA CONTROLAR A EDIÇÃO
-  const [editingId, setEditingId] = useState(null);
+  const currentMonthLabel = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(selectedAno, selectedMes - 1, 1));
 
-  const sortTransactions = (transactions) => {
-    return [...transactions].sort((a, b) => {
-      const dateA = new Date(a.date || a.data);
-      const dateB = new Date(b.date || b.data);
-      return dateA - dateB;
-    });
+  const handlePreviousMonth = () => {
+    const previousDate = new Date(selectedAno, selectedMes - 2, 1);
+    onChangeMonth(previousDate.getMonth() + 1, previousDate.getFullYear());
   };
 
-  const groupedIncomes = sortTransactions(incomes).reduce((acc, item) => {
-    const date = new Date(item.date || item.data);
-    const month = date.toLocaleString("pt-BR", {
-      month: "long",
-      year: "numeric",
-    });
-    const day = date.toLocaleDateString("pt-BR");
+  const handleNextMonth = () => {
+    const nextDate = new Date(selectedAno, selectedMes, 1);
+    onChangeMonth(nextDate.getMonth() + 1, nextDate.getFullYear());
+  };
 
-    if (!acc[month]) acc[month] = {};
-    if (!acc[month][day]) acc[month][day] = [];
+  const groupedIncomes = useMemo(
+    () =>
+      sortTransactions(incomes).reduce((acc, item) => {
+        const date = new Date(item.date || item.data);
+        const month = date.toLocaleString("pt-BR", {
+          month: "long",
+          year: "numeric",
+        });
+        const day = date.toLocaleDateString("pt-BR");
 
-    acc[month][day].push(item);
-    return acc;
-  }, {});
+        if (!acc[month]) acc[month] = {};
+        if (!acc[month][day]) acc[month][day] = [];
+        acc[month][day].push(item);
+        return acc;
+      }, {}),
+    [incomes],
+  );
 
-  const groupedExpenses = sortTransactions(expenses).reduce((acc, item) => {
-    const date = new Date(item.date || item.data);
-    const month = date.toLocaleString("pt-BR", {
-      month: "long",
-      year: "numeric",
-    });
-    const day = date.toLocaleDateString("pt-BR");
+  const groupedExpenses = useMemo(
+    () =>
+      sortTransactions(expenses).reduce((acc, item) => {
+        const date = new Date(item.date || item.data);
+        const month = date.toLocaleString("pt-BR", {
+          month: "long",
+          year: "numeric",
+        });
+        const day = date.toLocaleDateString("pt-BR");
 
-    if (!acc[month]) acc[month] = {};
-    if (!acc[month][day]) acc[month][day] = [];
+        if (!acc[month]) acc[month] = {};
+        if (!acc[month][day]) acc[month][day] = [];
+        acc[month][day].push(item);
+        return acc;
+      }, {}),
+    [expenses],
+  );
 
-    acc[month][day].push(item);
-    return acc;
-  }, {});
+  const expensesByCategory = useMemo(() => {
+    const grouped = expenses
+      .filter((item) => !item.investimentoId)
+      .reduce((acc, item) => {
+        const categoria = item.categoria || {};
+        const id = item.categoriaId || null;
+        const key = id || "sem-categoria";
+        const totalValue = Number(item.value || item.valor || 0);
 
-  const chartData = Object.entries(
-    [...incomes, ...expenses].reduce((acc, item) => {
-      const dateKey = new Date(item.date).toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-      });
+        if (!acc[key]) {
+          acc[key] = {
+            id,
+            nome: categoria.nome || "Sem categoria",
+            icone: categoria.icone || "",
+            cor: categoria.cor || "#94a3b8",
+            total: 0,
+          };
+        }
 
-      const isIncome = item.type?.toLowerCase() === "entrada";
-      const value = Number(item.value);
+        acc[key].total += totalValue;
+        return acc;
+      }, {});
+
+    return Object.values(grouped)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [expenses]);
+
+  const totalCategoryExpenses = useMemo(
+    () =>
+      expenses
+        .filter((item) => !item.investimentoId)
+        .reduce((acc, item) => acc + Number(item.value || item.valor || 0), 0),
+    [expenses],
+  );
+
+  const chartData = useMemo(() => {
+    const grouped = [...incomes, ...expenses].reduce((acc, item) => {
+      const rawDate = item.date || item.data;
+
+      // 👇 Pega só a parte da data sem converter timezone
+      const dateKey = rawDate.split("T")[0]; // "2026-04-05" sempre correto
+
+      const isIncome = (item.type || item.tipo)?.toLowerCase() === "entrada";
+      const value = Number(item.value || item.valor);
 
       if (!acc[dateKey]) {
         acc[dateKey] = { entrada: 0, saida: 0 };
       }
-
       if (isIncome) {
         acc[dateKey].entrada += value;
       } else {
         acc[dateKey].saida += value;
       }
+      return acc;
+    }, {});
 
-      return acc;
-    }, {}),
-  )
-    .sort((a, b) => {
-      const [dayA, monthA] = a[0].split("/").map(Number);
-      const [dayB, monthB] = b[0].split("/").map(Number);
-      return monthA - monthB || dayA - dayB;
-    })
-    .reduce((acc, [date, dayTotals], index) => {
-      const previousBalance = index > 0 ? acc[index - 1].saldo : 0;
-      acc.push({
-        data: date,
-        entrada: dayTotals.entrada,
-        saida: dayTotals.saida,
-        saldo: previousBalance + dayTotals.entrada - dayTotals.saida,
-      });
-      return acc;
-    }, []);
+    return Object.entries(grouped)
+      .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+      .reduce((acc, [isoDate, dayTotals], index) => {
+        const previousBalance =
+          index > 0 ? acc[index - 1].saldo : saldoAnterior;
+
+        const [year, month, day] = isoDate.split("-");
+        const displayLabel = `${day}/${month}/${year.slice(2)}`;
+
+        acc.push({
+          data: displayLabel,
+          entrada: dayTotals.entrada,
+          saida: dayTotals.saida,
+          saldo: previousBalance + dayTotals.entrada - dayTotals.saida,
+        });
+        return acc;
+      }, []);
+  }, [incomes, expenses, saldoAnterior]);
 
   const handleEditClick = (item, type) => {
-    setEditingId(item.id);
-    setNewItemName(item.name || item.titulo);
-    setNewItemDescription(item.description || item.descricao);
-    setNewItemValue(item.value || item.valor);
-    setInputType(type);
-
-    if (item.date || item.data) {
-      const dateObj = new Date(item.date || item.data);
-      setNewItemDate(dateObj.toISOString().split("T")[0]);
-    }
-
-    setIsFixed(item.fixa || false);
-    setFixedPeriod(item.periodo || "");
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const clearForm = () => {
-    setEditingId(null);
-    setNewItemName("");
-    setNewItemDescription("");
-    setNewItemValue("");
-    setNewItemDate("");
-    setIsFixed(false);
-    setFixedPeriod("");
-    setInputType("Saida");
-  };
-
-  const handleAddItem = async (e) => {
-    e.preventDefault();
-
-    if (!newItemName || !newItemValue || !inputType || !newItemDate) {
-      console.log("Faltam dados básicos");
-      return;
-    }
-
-    if (isFixed && !fixedPeriod) {
-      console.log("Falta o período de duração");
-      return;
-    }
-
-    const payload = {
-      titulo: newItemName,
-      descricao: newItemDescription,
-      valor: parseFloat(newItemValue),
-      tipo: inputType,
-      data: formatDate(newItemDate),
-      fixa: isFixed,
-      periodo: isFixed ? parseInt(fixedPeriod) : 0,
-    };
-
-    try {
-      if (editingId) {
-        // <-- FLUXO DE EDIÇÃO (PUT)
-        const response = await fetch(`${API_URL}/${editingId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (response.ok) {
-          fetchData(); // Atualiza a tela com os dados do banco
-          clearForm(); // Limpa o formulário
-        }
-      } else {
-        // <-- FLUXO DE CRIAÇÃO (POST)
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (response.ok) {
-          fetchData();
-          clearForm();
-        }
-      }
-    } catch (err) {
-      alert("Erro ao salvar (API Offline?)", err);
-    }
+    setEditingItem({ ...item, tipo: type });
+    setIsModalOpen(true);
   };
 
   const handleRemove = async (id) => {
     try {
-      await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
       fetchData();
     } catch (err) {
-      alert("Erro ao deletar (API Offline?)", err);
+      console.error("Erro ao deletar item:", err);
+      alert("Erro ao deletar. Verifique o console.");
     }
   };
 
@@ -230,6 +217,26 @@ const DashboardView = ({
         <h3 className="text-slate-700 font-bold mb-6 flex items-center gap-2">
           <DollarSign size={18} className="text-blue-500" /> Evolução Financeira
         </h3>
+
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <button
+            type="button"
+            onClick={handlePreviousMonth}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            ‹
+          </button>
+          <span className="text-sm font-semibold text-slate-700 capitalize">
+            {currentMonthLabel}
+          </span>
+          <button
+            type="button"
+            onClick={handleNextMonth}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            ›
+          </button>
+        </div>
 
         <div className="flex-1 w-full">
           <ResponsiveContainer width="100%" height={240}>
@@ -285,7 +292,7 @@ const DashboardView = ({
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
-                name="Entradas"
+                name="entrada"
               />
               <Line
                 type="monotone"
@@ -294,7 +301,7 @@ const DashboardView = ({
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
-                name="Saídas"
+                name="saida"
               />
               <Area
                 type="monotone"
@@ -306,16 +313,15 @@ const DashboardView = ({
                 fill="url(#colorSaldo)"
                 animationDuration={1000}
                 dot={{ r: 2, strokeWidth: 1, fill: "#3b82f6" }}
-                name="Saldo"
+                name="saldo"
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 gap-6 items-start">
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Cards mantidos iguais... */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
               <div className="flex items-center gap-2 text-emerald-600 mb-2 font-medium">
                 {" "}
@@ -339,17 +345,14 @@ const DashboardView = ({
             <div className="bg-blue-50 p-4 rounded-xl shadow-sm border border-blue-100">
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center gap-2 text-blue-700 font-medium">
-                  {" "}
-                  <PiggyBank size={20} /> Investimentos{" "}
+                  <PiggyBank size={20} /> Investimentos
                 </div>
                 <span className="text-xs font-bold text-blue-700 bg-blue-200 px-2 py-0.5 rounded-full">
-                  {" "}
-                  Meta: Definir{" "}
+                  Meta: Definir
                 </span>
               </div>
               <div className="text-2xl font-bold text-blue-900 mb-3">
-                {" "}
-                A implementar{" "}
+                {formatCurrency(totalInvestmentsBalance || 0)}
               </div>
             </div>
             <div
@@ -365,267 +368,305 @@ const DashboardView = ({
               </div>
             </div>
           </div>
-        </div>
 
-        <form
-          onSubmit={handleAddItem}
-          className={`bg-white p-6 rounded-xl shadow-sm border gap-4 flex flex-col justify-between h-full transition-all ${editingId ? "border-amber-400 ring-2 ring-amber-100" : "border-slate-200"}`}
-        >
-          {editingId && (
-            <div className="text-sm font-bold text-amber-600 bg-amber-50 p-2 rounded-lg mb-2 flex justify-between items-center">
-              <span>Modo de Edição Ativo</span>
-            </div>
-          )}
-
-          <div className="flex flex-col md:flex-row justify-between gap-4">
-            <input
-              type="text"
-              placeholder="Título"
-              className="flex-2 p-2 border rounded-lg placeholder-slate-500"
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Descrição"
-              className="flex-1 p-2 border rounded-lg placeholder-slate-500"
-              value={newItemDescription}
-              onChange={(e) => setNewItemDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center gap-2 px-1">
-            <input
-              type="checkbox"
-              id="isFixed"
-              className="w-4 h-4 text-emerald-500 rounded border-slate-300 disabled:opacity-50"
-              checked={isFixed}
-              onChange={(e) => setIsFixed(e.target.checked)}
-              disabled={editingId !== null} // <-- Bloqueia mudança de recorrência na edição
-              title={
-                editingId
-                  ? "Não é possível alterar a recorrência durante a edição"
-                  : ""
-              }
-            />
-            <label
-              htmlFor="isFixed"
-              className={`text-sm font-medium ${editingId ? "text-slate-400" : "text-slate-600"}`}
-            >
-              É uma movimentação recorrente?{" "}
-              {editingId && "(Bloqueado na edição)"}
-            </label>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-4">
-            <input
-              type="date"
-              placeholder="Data"
-              className="flex-1 p-2 border rounded-lg placeholder-slate-500"
-              value={newItemDate}
-              onChange={(e) => setNewItemDate(e.target.value)}
-            />
-
-            {isFixed && (
-              <input
-                type="number"
-                placeholder="Duração (meses)"
-                min="1"
-                className="flex-1 p-2 border rounded-lg placeholder-slate-500 disabled:bg-slate-50 disabled:text-slate-400"
-                value={fixedPeriod}
-                onChange={(e) => setFixedPeriod(e.target.value)}
-                title="Por quantos meses essa conta vai se repetir?"
-                disabled={editingId !== null}
-              />
-            )}
-
-            <input
-              type="number"
-              placeholder="Valor"
-              className="flex-1 p-2 border rounded-lg placeholder-slate-500"
-              value={newItemValue}
-              onChange={(e) => setNewItemValue(e.target.value)}
-            />
-            <select
-              className="flex-1 p-2 border rounded-lg placeholder-slate-500"
-              value={inputType}
-              onChange={(e) => setInputType(e.target.value)}
-            >
-              <option value="Saida">Saída</option>
-              <option value="Entrada">Entrada</option>
-            </select>
-          </div>
-
-          <div className="flex gap-2 mt-2">
-            {editingId && (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                <PieChart size={18} className="text-slate-500" /> Gastos por
+                Categoria
+              </h3>
               <button
                 type="button"
-                onClick={clearForm}
-                className="flex-1 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-medium transition-colors p-2"
+                onClick={onOpenCategoryManager}
+                title="Gerenciar categorias"
+                className="p-1 rounded-md hover:bg-slate-50"
               >
-                Cancelar
+                <Settings
+                  size={16}
+                  className="text-slate-400 hover:text-slate-600"
+                />
               </button>
+            </div>
+
+            {expensesByCategory.length === 0 ? (
+              <div className="text-center text-sm text-slate-400 py-6">
+                Nenhum gasto registrado neste mês
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {expensesByCategory.map((item) => {
+                  const percentage =
+                    totalCategoryExpenses > 0
+                      ? (item.total / totalCategoryExpenses) * 100
+                      : 0;
+
+                  return (
+                    <div key={item.id || item.nome}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="text-slate-700 font-medium">
+                          {item.icone} {item.nome}
+                        </span>
+                        <span className="text-slate-600 font-semibold">
+                          {formatCurrency(item.total)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.min(percentage, 100)}%`,
+                            backgroundColor: item.cor || "#94a3b8",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-            <button
-              type="submit"
-              className={`flex-2 text-white rounded-lg font-medium transition-colors p-2 ${editingId ? "bg-amber-500 hover:bg-amber-600" : "bg-emerald-500 hover:bg-emerald-600"}`}
-              style={{ flexGrow: 2 }}
-            >
-              {editingId ? "Atualizar" : "Salvar"}
-            </button>
           </div>
-        </form>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col">
           <h3 className="font-bold text-emerald-700 mb-3 shrink-0">Entradas</h3>
-          {Object.entries(groupedIncomes).map(([month, days]) => (
-            <details
-              key={month}
-              className="group mb-4 bg-white rounded-lg border border-slate-200 shadow-sm"
-              close="true"
-            >
-              <summary className="flex justify-between items-center p-4 cursor-pointer list-none font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-                <span className="capitalize">{month}</span>
-                <span className="text-slate-400 group-open:rotate-180 transition-transform">
-                  ▼
-                </span>
-              </summary>
+          {Object.keys(groupedIncomes).length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
+              <ArrowUpCircle size={32} className="text-slate-200" />
+              <p className="text-sm text-slate-400">
+                Nenhuma entrada em {currentMonthLabel}
+              </p>
+            </div>
+          ) : (
+            Object.entries(groupedIncomes).map(([month, days]) => (
+              <details
+                key={month}
+                className="group mb-4 bg-white rounded-lg border border-slate-200 shadow-sm"
+                close="true"
+              >
+                <summary className="flex justify-between items-center p-4 cursor-pointer list-none font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                  <span className="capitalize">{month}</span>
+                  <span className="text-slate-400 group-open:rotate-180 transition-transform">
+                    ▼
+                  </span>
+                </summary>
 
-              <div className="p-4 pt-0 border-t border-slate-100">
-                {Object.entries(days).map(([day, transactions]) => (
-                  <div key={day} className="mt-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      {day}
-                    </h4>
+                <div className="p-4 pt-0 border-t border-slate-100">
+                  {Object.entries(days).map(([day, transactions]) => (
+                    <div key={day} className="mt-4">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        {day}
+                      </h4>
 
-                    <div className="space-y-1">
-                      {transactions.map((i) => (
-                        <div
-                          key={i.id}
-                          className="flex justify-between py-3 border-b last:border-0 border-slate-50 hover:bg-slate-50 px-2 rounded-md transition-colors"
-                        >
-                          <div>
-                            <span className="block text-sm font-medium text-slate-700">
-                              {i.name || i.titulo}
-                            </span>
-                            <p className="text-xs font-light text-slate-500">
-                              {i.description || i.descricao}
-                            </p>
+                      <div className="space-y-1">
+                        {transactions.map((i) => (
+                          <div
+                            key={i.id}
+                            className="flex justify-between py-3 border-b last:border-0 border-slate-50 hover:bg-slate-50 px-2 rounded-md transition-colors"
+                          >
+                            <div>
+                              <span className="block text-sm font-medium text-slate-700">
+                                {i.name || i.titulo}
+                              </span>
+                              {i.categoria && (
+                                <span
+                                  className="text-[10px] px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 mt-1"
+                                  style={{
+                                    backgroundColor:
+                                      (i.categoria.cor || "#94a3b8") + "20",
+                                    color: i.categoria.cor || "#94a3b8",
+                                  }}
+                                >
+                                  {i.categoria.icone} {i.categoria.nome}
+                                </span>
+                              )}
+                              <p className="text-xs font-light text-slate-500">
+                                {i.description || i.descricao}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-emerald-600 text-sm">
+                                {formatCurrency(i.value || i.valor)}
+                              </span>
+
+                              {/* <-- TRAVA DE EDIÇÃO/EXCLUSÃO AQUI --> */}
+                              {i.investimentoId ? (
+                                <div
+                                  className="flex items-center gap-1 text-blue-500 bg-blue-50 px-2 py-1 rounded-md cursor-help"
+                                  title="Gerenciado na aba de Investimentos"
+                                >
+                                  <Briefcase size={14} />
+                                  <span className="text-[10px] font-bold uppercase hidden sm:inline">
+                                    Investimento
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      handleEditClick(i, "Entrada")
+                                    }
+                                    className="p-1 hover:bg-amber-50 rounded-full transition-colors"
+                                    title="Editar"
+                                  >
+                                    <Pencil
+                                      size={14}
+                                      className="text-slate-300 hover:text-amber-500"
+                                    />
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleRemove(i.id)}
+                                    className="p-1 hover:bg-red-50 rounded-full transition-colors"
+                                    title="Excluir"
+                                  >
+                                    <Trash2
+                                      size={14}
+                                      className="text-slate-300 hover:text-red-500"
+                                    />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-emerald-600 text-sm">
-                              {formatCurrency(i.value || i.valor)}
-                            </span>
-
-                            {/* <-- BOTÃO DE EDITAR (LÁPIS) ADICIONADO AQUI */}
-                            <button
-                              onClick={() => handleEditClick(i, "Entrada")}
-                              className="p-1 hover:bg-amber-50 rounded-full transition-colors"
-                              title="Editar"
-                            >
-                              <Pencil
-                                size={14}
-                                className="text-slate-300 hover:text-amber-500"
-                              />
-                            </button>
-
-                            <button
-                              onClick={() => handleRemove(i.id, "Entrada")}
-                              className="p-1 hover:bg-red-50 rounded-full transition-colors"
-                              title="Excluir"
-                            >
-                              <Trash2
-                                size={14}
-                                className="text-slate-300 hover:text-red-500"
-                              />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          ))}
+                  ))}
+                </div>
+              </details>
+            ))
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col">
           <h3 className="font-bold text-rose-700 mb-3 shrink-0">Saídas</h3>
-          {Object.entries(groupedExpenses).map(([month, days]) => (
-            <details
-              key={month}
-              className="group mb-4 bg-white rounded-lg border border-slate-200 shadow-sm"
-              close="true"
-            >
-              <summary className="flex justify-between items-center p-4 cursor-pointer list-none font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-                <span className="capitalize">{month}</span>
-                <span className="text-slate-400 group-open:rotate-180 transition-transform">
-                  ▼
-                </span>
-              </summary>
+          {Object.keys(groupedExpenses).length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
+              <ArrowDownCircle size={32} className="text-slate-200" />
+              <p className="text-sm text-slate-400">
+                Nenhuma saída em {currentMonthLabel}
+              </p>
+            </div>
+          ) : (
+            Object.entries(groupedExpenses).map(([month, days]) => (
+              <details
+                key={month}
+                className="group mb-4 bg-white rounded-lg border border-slate-200 shadow-sm"
+                close="true"
+              >
+                <summary className="flex justify-between items-center p-4 cursor-pointer list-none font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                  <span className="capitalize">{month}</span>
+                  <span className="text-slate-400 group-open:rotate-180 transition-transform">
+                    ▼
+                  </span>
+                </summary>
 
-              <div className="p-4 pt-0 border-t border-slate-100">
-                {Object.entries(days).map(([day, transactions]) => (
-                  <div key={day} className="mt-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      {day}
-                    </h4>
+                <div className="p-4 pt-0 border-t border-slate-100">
+                  {Object.entries(days).map(([day, transactions]) => (
+                    <div key={day} className="mt-4">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        {day}
+                      </h4>
 
-                    <div className="space-y-1">
-                      {transactions.map((i) => (
-                        <div
-                          key={i.id}
-                          className="flex justify-between py-3 border-b last:border-0 border-slate-50 hover:bg-slate-50 px-2 rounded-md transition-colors"
-                        >
-                          <div>
-                            <span className="block text-sm font-medium text-slate-700">
-                              {i.name || i.titulo}
-                            </span>
-                            <p className="text-xs font-light text-slate-500">
-                              {i.description || i.descricao}
-                            </p>
+                      <div className="space-y-1">
+                        {transactions.map((i) => (
+                          <div
+                            key={i.id}
+                            className="flex justify-between py-3 border-b last:border-0 border-slate-50 hover:bg-slate-50 px-2 rounded-md transition-colors"
+                          >
+                            <div>
+                              <span className="block text-sm font-medium text-slate-700">
+                                {i.name || i.titulo}
+                              </span>
+                              {i.categoria && (
+                                <span
+                                  className="text-[10px] px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 mt-1"
+                                  style={{
+                                    backgroundColor:
+                                      (i.categoria.cor || "#94a3b8") + "20",
+                                    color: i.categoria.cor || "#94a3b8",
+                                  }}
+                                >
+                                  {i.categoria.icone} {i.categoria.nome}
+                                </span>
+                              )}
+                              <p className="text-xs font-light text-slate-500">
+                                {i.description || i.descricao}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-rose-600 text-sm">
+                                {formatCurrency(i.value || i.valor)}
+                              </span>
+
+                              {/* <-- TRAVA DE EDIÇÃO/EXCLUSÃO AQUI --> */}
+                              {i.investimentoId ? (
+                                <div
+                                  className="flex items-center gap-1 text-blue-500 bg-blue-50 px-2 py-1 rounded-md cursor-help"
+                                  title="Gerenciado na aba de Investimentos"
+                                >
+                                  <Briefcase size={14} />
+                                  <span className="text-[10px] font-bold uppercase hidden sm:inline">
+                                    Investimento
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleEditClick(i, "Saida")}
+                                    className="p-1 hover:bg-amber-50 rounded-full transition-colors"
+                                    title="Editar"
+                                  >
+                                    <Pencil
+                                      size={14}
+                                      className="text-slate-300 hover:text-amber-500"
+                                    />
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleRemove(i.id)}
+                                    className="p-1 hover:bg-red-50 rounded-full transition-colors"
+                                    title="Excluir"
+                                  >
+                                    <Trash2
+                                      size={14}
+                                      className="text-slate-300 hover:text-red-500"
+                                    />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-rose-600 text-sm">
-                              {formatCurrency(i.value || i.valor)}
-                            </span>
-
-                            {/* <-- BOTÃO DE EDITAR (LÁPIS) ADICIONADO AQUI */}
-                            <button
-                              onClick={() => handleEditClick(i, "Saida")}
-                              className="p-1 hover:bg-amber-50 rounded-full transition-colors"
-                              title="Editar"
-                            >
-                              <Pencil
-                                size={14}
-                                className="text-slate-300 hover:text-amber-500"
-                              />
-                            </button>
-
-                            <button
-                              onClick={() => handleRemove(i.id, "Saída")}
-                              className="p-1 hover:bg-red-50 rounded-full transition-colors"
-                              title="Excluir"
-                            >
-                              <Trash2
-                                size={14}
-                                className="text-slate-300 hover:text-red-500"
-                              />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          ))}
+                  ))}
+                </div>
+              </details>
+            ))
+          )}
         </div>
       </div>
+
+      <button
+        className="fixed bottom-6 right-6 z-40 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center transition-colors"
+        onClick={() => {
+          setEditingItem(null);
+          setIsModalOpen(true);
+        }}
+      >
+        <Plus size={24} />
+      </button>
+
+      <TransactionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={fetchData}
+        categorias={categorias}
+        editingItem={editingItem}
+      />
     </div>
   );
 };

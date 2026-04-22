@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Trash2, Clock, Briefcase } from "lucide-react";
 
 import { API_METAS_URL } from "../services/api";
+import { getAuthHeaders } from "../services/auth";
 
 import { formatCurrency } from "../util/formatCurrency";
 import { formatHours } from "../util/formatHours";
@@ -21,7 +22,7 @@ const WishListView = ({
   useEffect(() => {
     const fetchMetas = async () => {
       try {
-        const res = await fetch(API_METAS_URL);
+        const res = await fetch(API_METAS_URL, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setWishes(
@@ -48,7 +49,7 @@ const WishListView = ({
     try {
       const res = await fetch(API_METAS_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(novaMeta),
       });
 
@@ -66,7 +67,10 @@ const WishListView = ({
 
   const deleteWish = async (id) => {
     try {
-      await fetch(`${API_METAS_URL}/${id}`, { method: "DELETE" });
+      await fetch(`${API_METAS_URL}/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
       setWishes(wishes.filter((w) => w.id !== id));
     } catch (err) {
       console.error("Erro ao deletar meta:", err);
