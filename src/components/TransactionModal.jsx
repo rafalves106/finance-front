@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { API_URL } from "../services/api";
 import { formatDate } from "../util/formatDate";
+import { getAuthHeaders } from "../services/auth";
 
 const INITIAL_FORM = {
   editingId: null,
@@ -86,12 +87,12 @@ const TransactionModal = ({
       const response = editingId
         ? await fetch(`${API_URL}/${editingId}`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify(payload),
           })
         : await fetch(API_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify(payload),
           });
 

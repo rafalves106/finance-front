@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { API_URL } from "../services/api";
 import { formatCurrency } from "../util/formatCurrency";
 import TransactionModal from "./TransactionModal";
+import { getAuthHeaders } from "../services/auth";
 
 import {
   Trash2,
@@ -190,7 +191,10 @@ const DashboardView = ({
 
   const handleRemove = async (id) => {
     try {
-      await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+      await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
       fetchData();
     } catch (err) {
       console.error("Erro ao deletar item:", err);

@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Target,
   Bike,
+  LogOut,
 } from "lucide-react";
 
 import DashboardView from "./components/DashboardView";
@@ -12,12 +13,14 @@ import InvestmentsView from "./components/InvestmentsView";
 import WishlistView from "./components/WishListView";
 import MotoView from "./components/BikeView";
 import CategoryManagerModal from "./components/CategoryManagerModal";
+import LoginView from "./components/LoginView";
 
 import {
   API_URL,
   API_INVESTIMENTOS_URL,
   API_CATEGORIAS_URL,
 } from "./services/api";
+import { getAuthHeaders, isAuthenticated, removeToken } from "./services/auth";
 
 const mapApiToFrontend = (item) => ({
   id: item.id,
@@ -32,6 +35,7 @@ const mapApiToFrontend = (item) => ({
 });
 
 const App = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(isAuthenticated());
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedMes, setSelectedMes] = useState(new Date().getMonth() + 1);
   const [selectedAno, setSelectedAno] = useState(new Date().getFullYear());
@@ -63,14 +67,6 @@ const App = () => {
   const hourlyRate =
     currentMonthIncome > 0 ? currentMonthIncome / workHoursPerMonth : 0;
 
-  useEffect(() => {
-    fetchData();
-  }, [selectedMes, selectedAno]);
-
-  useEffect(() => {
-    fetchCategorias();
-  }, []);
-
   const handleChangeMonth = (mes, ano) => {
     setSelectedMes(mes);
     setSelectedAno(ano);
@@ -78,7 +74,16 @@ const App = () => {
 
   const fetchCategorias = async () => {
     try {
-      const response = await fetch(API_CATEGORIAS_URL);
+      const response = await fetch(API_CATEGORIAS_URL, {
+        headers: getAuthHeaders(),
+      });
+
+      if (response.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setCategorias(data);
@@ -94,7 +99,15 @@ const App = () => {
 
       const responseMov = await fetch(
         `${API_URL}?mes=${selectedMes}&ano=${selectedAno}`,
+        { headers: getAuthHeaders() },
       );
+
+      if (responseMov.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
+
       const dataMov = await responseMov.json();
 
       setIncomes(
@@ -106,7 +119,15 @@ const App = () => {
 
       const resSaldo = await fetch(
         `${API_URL}/saldo-acumulado?mes=${selectedMes}&ano=${selectedAno}`,
+        { headers: getAuthHeaders() },
       );
+
+      if (resSaldo.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
+
       if (resSaldo.ok) {
         const { saldo } = await resSaldo.json();
         setSaldoAnterior(saldo);
@@ -114,7 +135,14 @@ const App = () => {
 
       const responseInv = await fetch(
         `${API_INVESTIMENTOS_URL}?mostrarInativos=false`,
+        { headers: getAuthHeaders() },
       );
+
+      if (responseInv.status === 401) {
+        removeToken();
+        setIsLoggedIn(false);
+        return;
+      }
 
       if (responseInv.ok) {
         const dataInv = await responseInv.json();
@@ -126,6 +154,22 @@ const App = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchData();
+    }
+  }, [isLoggedIn, selectedMes, selectedAno]);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchCategorias();
+    }
+  }, [isLoggedIn]);
+
+  if (!isLoggedIn) {
+    return <LoginView onLoginSuccess={() => setIsLoggedIn(true)} />;
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
@@ -174,8 +218,17 @@ const App = () => {
           ))}
         </nav>
 
-        <div className="p-6 border-t border-slate-800 hidden md:block">
+        <div className="p-6 border-t border-slate-800 hidden md:block space-y-3">
           <p className="text-xs text-slate-500">Logado como Admin</p>
+          <button
+            onClick={() => {
+              removeToken();
+              setIsLoggedIn(false);
+            }}
+            className="w-full flex items-center justify-center gap-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl py-2 transition-colors"
+          >
+            <LogOut size={16} /> Sair
+          </button>
         </div>
       </aside>
 

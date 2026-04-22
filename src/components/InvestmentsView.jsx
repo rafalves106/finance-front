@@ -2,6 +2,7 @@ import { useState } from "react";
 import { API_URL } from "../services/api";
 import { formatCurrency } from "../util/formatCurrency";
 import { formatDate } from "../util/formatDate";
+import { getAuthHeaders } from "../services/auth";
 
 import {
   TrendingUp,
@@ -64,7 +65,7 @@ const InvestmentsView = ({ investmentAmount, investments, fetchData }) => {
     try {
       const response = await fetch(INV_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -106,7 +107,7 @@ const InvestmentsView = ({ investmentAmount, investments, fetchData }) => {
     try {
       const response = await fetch(url, {
         method: method,
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -135,6 +136,7 @@ const InvestmentsView = ({ investmentAmount, investments, fetchData }) => {
     try {
       const response = await fetch(`${INV_API_URL}/${id}`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
       });
       if (response.ok) {
         fetchData();

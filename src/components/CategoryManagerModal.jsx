@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
 
 import { API_CATEGORIAS_URL } from "../services/api";
+import { getAuthHeaders } from "../services/auth";
 
 const CategoryManagerModal = ({
   isOpen,
@@ -45,6 +46,7 @@ const CategoryManagerModal = ({
     try {
       const response = await fetch(`${API_CATEGORIAS_URL}/${id}`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
       });
 
       if (response.ok) {
@@ -72,12 +74,12 @@ const CategoryManagerModal = ({
       const response = editingCat
         ? await fetch(`${API_CATEGORIAS_URL}/${editingCat.id}`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify(payload),
           })
         : await fetch(API_CATEGORIAS_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify(payload),
           });
 
