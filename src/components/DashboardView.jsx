@@ -14,6 +14,7 @@ import {
   Briefcase,
   Plus,
   PieChart,
+  Settings,
 } from "lucide-react";
 
 import {
@@ -47,15 +48,13 @@ const DashboardView = ({
   selectedAno,
   onChangeMonth,
   categorias,
+  onOpenCategoryManager,
   incomes = [],
   expenses = [],
+  saldoAnterior = 0,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-
-  const isCurrentSelectedMonth =
-    selectedMes === new Date().getMonth() + 1 &&
-    selectedAno === new Date().getFullYear();
 
   const currentMonthLabel = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
@@ -68,8 +67,6 @@ const DashboardView = ({
   };
 
   const handleNextMonth = () => {
-    if (isCurrentSelectedMonth) return;
-
     const nextDate = new Date(selectedAno, selectedMes, 1);
     onChangeMonth(nextDate.getMonth() + 1, nextDate.getFullYear());
   };
@@ -170,9 +167,9 @@ const DashboardView = ({
     return Object.entries(grouped)
       .sort((a, b) => new Date(a[0]) - new Date(b[0]))
       .reduce((acc, [isoDate, dayTotals], index) => {
-        const previousBalance = index > 0 ? acc[index - 1].saldo : 0;
+        const previousBalance =
+          index > 0 ? acc[index - 1].saldo : saldoAnterior;
 
-        // 👇 Monta o label manualmente — sem conversão de timezone
         const [year, month, day] = isoDate.split("-");
         const displayLabel = `${day}/${month}/${year.slice(2)}`;
 
@@ -184,7 +181,7 @@ const DashboardView = ({
         });
         return acc;
       }, []);
-  }, [incomes, expenses]);
+  }, [incomes, expenses, saldoAnterior]);
 
   const handleEditClick = (item, type) => {
     setEditingItem({ ...item, tipo: type });
@@ -231,8 +228,7 @@ const DashboardView = ({
           <button
             type="button"
             onClick={handleNextMonth}
-            disabled={isCurrentSelectedMonth}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
           >
             ›
           </button>
@@ -370,10 +366,23 @@ const DashboardView = ({
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
-              <PieChart size={18} className="text-slate-500" /> Gastos por
-              Categoria
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                <PieChart size={18} className="text-slate-500" /> Gastos por
+                Categoria
+              </h3>
+              <button
+                type="button"
+                onClick={onOpenCategoryManager}
+                title="Gerenciar categorias"
+                className="p-1 rounded-md hover:bg-slate-50"
+              >
+                <Settings
+                  size={16}
+                  className="text-slate-400 hover:text-slate-600"
+                />
+              </button>
+            </div>
 
             {expensesByCategory.length === 0 ? (
               <div className="text-center text-sm text-slate-400 py-6">

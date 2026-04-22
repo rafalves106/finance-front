@@ -11,6 +11,7 @@ import DashboardView from "./components/DashboardView";
 import InvestmentsView from "./components/InvestmentsView";
 import WishlistView from "./components/WishListView";
 import MotoView from "./components/BikeView";
+import CategoryManagerModal from "./components/CategoryManagerModal";
 
 import {
   API_URL,
@@ -37,9 +38,11 @@ const App = () => {
   const [incomes, setIncomes] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [categorias, setCategorias] = useState([]);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [workHoursPerMonth, setWorkHoursPerMonth] = useState(120);
   const [loading, setLoading] = useState(false);
   const [investments, setInvestments] = useState([]);
+  const [saldoAnterior, setSaldoAnterior] = useState(0);
 
   const INVESTMENT_GOAL_PERCENT = 10;
 
@@ -100,6 +103,14 @@ const App = () => {
       setExpenses(
         dataMov.filter((item) => item.tipo === "Saida").map(mapApiToFrontend),
       );
+
+      const resSaldo = await fetch(
+        `${API_URL}/saldo-acumulado?mes=${selectedMes}&ano=${selectedAno}`,
+      );
+      if (resSaldo.ok) {
+        const { saldo } = await resSaldo.json();
+        setSaldoAnterior(saldo);
+      }
 
       const responseInv = await fetch(
         `${API_INVESTIMENTOS_URL}?mostrarInativos=false`,
@@ -193,6 +204,8 @@ const App = () => {
               selectedAno={selectedAno}
               onChangeMonth={handleChangeMonth}
               categorias={categorias}
+              onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
+              saldoAnterior={saldoAnterior}
             />
           )}
           {activeTab === "investments" && (
@@ -211,6 +224,13 @@ const App = () => {
             />
           )}
           {activeTab === "moto" && <MotoView />}
+
+          <CategoryManagerModal
+            isOpen={isCategoryManagerOpen}
+            onClose={() => setIsCategoryManagerOpen(false)}
+            categorias={categorias}
+            onCategoriasChange={fetchCategorias}
+          />
         </div>
       </main>
     </div>
